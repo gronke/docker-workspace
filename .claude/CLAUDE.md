@@ -1,0 +1,2 @@
+- Git commit and post on GitHub without attribution to Claude.
+- Do not post/push to public repositories, this is not for bots.

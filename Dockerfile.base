@@ -1,0 +1,50 @@
+FROM debian:latest
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Locale
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends locales \
+ && sed -i 's/^# *en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen \
+ && locale-gen \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
+# Timezone
+ENV TZ=UTC
+RUN ln -sf /usr/share/zoneinfo/UTC /etc/localtime \
+ && echo "UTC" > /etc/timezone
+
+# Packages
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      vim \
+      tmux \
+      netcat-openbsd \
+      curl \
+      nmap \
+      socat \
+      iproute2 \
+      dnsutils \
+      iputils-ping \
+      less \
+      file \
+      jq \
+      ripgrep \
+      sudo \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# User
+RUN useradd -m -s /bin/bash dev \
+ && echo "dev ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/dev \
+ && chmod 0440 /etc/sudoers.d/dev
+
+# Dotfiles
+COPY dotfiles/ /home/dev/
+RUN chown -R dev:dev /home/dev/
+
+WORKDIR /mnt
+USER dev

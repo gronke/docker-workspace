@@ -1,0 +1,17 @@
+FROM workspace-base
+
+USER dev
+
+# Install claude-code via native installer
+RUN curl -fsSL https://claude.ai/install.sh | bash
+
+# Pre-configured claude settings (model, permissions)
+COPY --chown=dev:dev claude/settings.json /home/dev/.claude/settings.json
+
+# Make claude available via PATH
+RUN echo 'export PATH="$HOME/.local/bin:$PATH"' >> /home/dev/.profile
+
+# Max effort does not persist in settings.json, set as env
+ENV CLAUDE_CODE_EFFORT_LEVEL=max
+
+USER dev
