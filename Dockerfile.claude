@@ -2,9 +2,8 @@ FROM workspace-base
 
 # claude.d fragments + merge script (root-owned, executed at entrypoint).
 COPY claude.d/ /etc/claude-code/claude.d/
-COPY scripts/merge-claude-config.sh /usr/local/bin/merge-claude-config.sh
-COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/merge-claude-config.sh /usr/local/bin/entrypoint.sh
+COPY --chmod=0755 scripts/merge-claude-config.sh /usr/local/bin/merge-claude-config.sh
+COPY --chmod=0755 scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 USER dev
 
