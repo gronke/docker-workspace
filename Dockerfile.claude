@@ -5,6 +5,13 @@ COPY claude.d/ /etc/claude-code/claude.d/
 COPY --chmod=0755 scripts/merge-claude-config.sh /usr/local/bin/merge-claude-config.sh
 COPY --chmod=0755 scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 
+# Starter ~/.claude/CLAUDE.md — installed by the entrypoint on first
+# start (does NOT overwrite an existing user file). Ships project
+# defaults (e.g. no Claude attribution in commits/PRs). Operators
+# edit ~/.claude/CLAUDE.md inside their running container to add or
+# override preferences; subsequent starts leave their edits alone.
+COPY .claude/CLAUDE.md /etc/claude-code/CLAUDE.md.starter
+
 USER dev
 
 # Install claude-code via native installer
