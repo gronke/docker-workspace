@@ -40,6 +40,38 @@ RUN apt-get update \
       openssh-client \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Ops tooling (SOPS + age) — single static binaries from upstream
+# releases. Pinned versions; bump in tandem when refreshing the image.
+# Defaults track infrastructure/Dockerfile.sops so a workspace and
+# the controller agree on tool versions.
+ARG SOPS_VERSION=3.12.2
+ARG AGE_VERSION=1.3.1
+
+RUN set -eux; \
+    arch=$(dpkg --print-architecture); \
+    case "$arch" in \
+      amd64) sops_arch=amd64 ;; \
+      arm64) sops_arch=arm64 ;; \
+      *) echo "unsupported arch: $arch" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /usr/local/bin/sops \
+      "https://github.com/getsops/sops/releases/download/v${SOPS_VERSION}/sops-v${SOPS_VERSION}.linux.${sops_arch}"; \
+    chmod 0755 /usr/local/bin/sops
+
+RUN set -eux; \
+    arch=$(dpkg --print-architecture); \
+    case "$arch" in \
+      amd64) age_arch=amd64 ;; \
+      arm64) age_arch=arm64 ;; \
+      *) echo "unsupported arch: $arch" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /tmp/age.tgz \
+      "https://github.com/FiloSottile/age/releases/download/v${AGE_VERSION}/age-v${AGE_VERSION}-linux-${age_arch}.tar.gz"; \
+    tar -xzf /tmp/age.tgz -C /tmp; \
+    install -m 0755 /tmp/age/age        /usr/local/bin/age; \
+    install -m 0755 /tmp/age/age-keygen /usr/local/bin/age-keygen; \
+    rm -rf /tmp/age /tmp/age.tgz
+
 # User
 RUN useradd -m -s /bin/bash dev \
  && echo "dev ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/dev \

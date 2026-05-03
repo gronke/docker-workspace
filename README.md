@@ -10,11 +10,13 @@ Debian with `en_US.UTF-8` locale, UTC timezone, and common tools:
 
 vim, tmux, netcat-openbsd, curl, nmap, socat, iproute2, dnsutils, iputils-ping, less, file, jq, ripgrep, sudo, git, gettext-base, openssh-client
 
+Plus ops tooling (`sops`, `age`, `age-keygen`) for editing SOPS-encrypted vault files in mounted repos. Versions are pinned via build args (`SOPS_VERSION`, `AGE_VERSION`) — override at build time when bumping. Defaults track `infrastructure/Dockerfile.sops` in the infrastructure repo.
+
 Runs as user `dev` (passwordless sudo) with working directory `/mnt`.
 
 ### Claude (`workspace-claude`)
 
-Extends base with a pre-configured [Claude Code](https://claude.ai/code) installation. Configuration is assembled at container start from JSON fragments in `claude.d/` (theme, onboarding-skip, MCP servers with runtime-substituted tokens). The shell alias `claude='claude --model "opus[1m]" --effort max'` is set in `~/.bashrc` for the `dev` user.
+Extends base with a pre-configured Claude Code installation. Configuration is assembled at container start from JSON fragments in `claude.d/` (theme, onboarding-skip, MCP servers with runtime-substituted tokens). The shell alias `claude='claude --model "opus[1m]" --effort max'` is set in `~/.bashrc` for the `dev` user.
 
 ## Build
 
