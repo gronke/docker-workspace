@@ -38,6 +38,8 @@ RUN apt-get update \
       git \
       gettext-base \
       openssh-client \
+      wireguard-tools \
+      openresolv \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Ops tooling (SOPS + age) — single static binaries from upstream
@@ -81,5 +83,15 @@ RUN useradd -m -s /bin/bash dev \
 COPY dotfiles/ /home/dev/
 RUN chown -R dev:dev /home/dev/
 
+# WireGuard auto-bring-up: helper + entrypoint. wg-up.sh iterates
+# /etc/wireguard/*.conf at start (no-op when nothing is mounted).
+# entrypoint-base.sh execs through to $@, so adding ENTRYPOINT here
+# does not change how `docker run workspace-base [cmd]` behaves.
+COPY --chmod=0755 scripts/wg-up.sh           /usr/local/bin/wg-up.sh
+COPY --chmod=0755 scripts/entrypoint-base.sh /usr/local/bin/entrypoint.sh
+
 WORKDIR /mnt
 USER dev
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["bash"]

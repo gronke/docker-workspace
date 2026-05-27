@@ -64,6 +64,25 @@ Then run `claude` inside the container.
 
 The optional `-v ~/.ssh:/home/dev/.ssh:ro` mount lets you push/pull via SSH-based git remotes using existing host keys.
 
+### WireGuard
+
+The base image ships `wireguard-tools`. At container start, every `*.conf` under `/etc/wireguard/` is brought up via `wg-quick`; failures are logged but non-fatal, and re-running the entrypoint skips interfaces already up.
+
+```sh
+docker run -it \
+  --cap-add=NET_ADMIN \
+  -v /path/to/wg-configs:/etc/wireguard:ro \
+  -v "$(pwd)":/mnt \
+  workspace-base
+```
+
+Requirements and knobs:
+
+- **Host kernel must support WireGuard.** Linux ≥ 5.6 has it built in; on older kernels run `modprobe wireguard` on the host. The container does not load kernel modules.
+- `--cap-add=NET_ADMIN` is required for `ip link add ... type wireguard`.
+- `--sysctl net.ipv4.conf.all.src_valid_mark=1` is sometimes needed when the host default-route policy differs from the tunnel's `AllowedIPs`.
+- `-e WG_AUTOSTART=0` skips bring-up entirely (also accepts `false`, `no`, `off`).
+
 ## claude.d — configuration fragments
 
 Claude Code settings live in JSON fragments under `/etc/claude-code/claude.d/` and are deep-merged into `~/.claude.json` at container start by `scripts/merge-claude-config.sh`:
