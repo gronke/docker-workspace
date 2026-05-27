@@ -1,6 +1,13 @@
 #!/bin/sh
 set -eu
 
+# Bring up WireGuard tunnels mounted at /etc/wireguard/. This file
+# replaces the base entrypoint at the same path, so the bring-up
+# that the base image performs has to be re-invoked here.
+if [ -x /usr/local/bin/wg-up.sh ]; then
+    /usr/local/bin/wg-up.sh || true
+fi
+
 # Wire GITHUB_TOKEN as HTTPS credential helper for git pull/push.
 if [ -n "${GITHUB_TOKEN:-}" ]; then
     git config --global credential.helper store
