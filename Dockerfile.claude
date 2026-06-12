@@ -1,9 +1,12 @@
 FROM workspace-base
 
-# claude.d fragments + merge script (root-owned, executed at entrypoint).
+# claude.d fragments + config builder (root-owned, applied at entrypoint).
 COPY claude.d/ /etc/claude-code/claude.d/
-COPY --chmod=0755 scripts/merge-claude-config.sh /usr/local/bin/merge-claude-config.sh
+COPY --chmod=0755 scripts/claude-config-builder /usr/local/bin/claude-config-builder
 COPY --chmod=0755 scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+
+# claude.d shell hooks (aliases, env) for every interactive bash.
+RUN printf '%s\n' 'command -v claude-config-builder >/dev/null 2>&1 && eval "$(claude-config-builder shellenv)"' >> /etc/bash.bashrc
 
 # Starter ~/.claude/CLAUDE.md — installed by the entrypoint on first
 # start (does NOT overwrite an existing user file). Ships project
@@ -19,12 +22,6 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 
 # Make claude available via PATH
 RUN echo 'export PATH="$HOME/.local/bin:$PATH"' >> /home/dev/.profile
-
-# Default flags via shell alias — Claude Code does not honor env vars for these.
-RUN echo 'alias claude='"'"'claude --model "opus[1m]" --effort max'"'"'' >> /home/dev/.bashrc
-
-# Max effort does not persist in settings.json, set as env (covers non-interactive shells).
-ENV CLAUDE_CODE_EFFORT_LEVEL=max
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["bash"]

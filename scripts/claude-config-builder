@@ -1,0 +1,154 @@
+#!/bin/sh
+# claude-config-builder — assemble Claude Code configuration from claude.d drop-ins.
+#
+# A claude.d directory stacks ordered drop-in fragments. Entries are processed
+# in LC_ALL=C order *by basename*, unioned across one or more search directories
+# (CLAUDE_CONFIG_PATH, colon-separated — later directory wins on a basename
+# collision). Four entry kinds:
+#
+#   NNNN-name.json        (flat file)  -> merged into the default target, ~/.claude.json
+#   NNNN-name.json.tpl    (flat file)  -> envsubst first, then merged into ~/.claude.json
+#   [NNNN-]<dest>.json/   (directory)  -> its *.json[.tpl] children merged into <dest>; the
+#                                         directory name (minus any NNNN- order prefix) maps to:
+#                                           claude.json   -> ~/.claude.json
+#                                           settings.json -> ~/.claude/settings.json
+#   NNNN-name.sh          (hook)       -> sourced; sets aliases / exports env / runs commands.
+#                                         Branches on $CLAUDE_CONFIG_PHASE (apply | shellenv).
+#
+# JSON merge is jq '.[0] * .[1]' — recursive object merge; ARRAYS ARE REPLACED
+# (last writer wins per key), so do not split an array across fragments. Each
+# target is seeded from its existing file, so re-running is idempotent and
+# preserves edits the user/session made on top.
+#
+# Modes:
+#   claude-config-builder apply      Assemble JSON targets and run hooks (phase=apply).
+#                                    Run once at workspace startup.
+#   claude-config-builder shellenv   Print `. <hook>` lines for the shell to `eval`
+#                                    (phase=shellenv): `eval "$(claude-config-builder shellenv)"`.
+#
+# Deliberately project-agnostic (no paths beyond $HOME + the search path) so it
+# can be lifted into a standalone claude-config-builder repo. Requires: jq, envsubst.
+
+set -eu
+
+: "${CLAUDE_CONFIG_PATH:=/etc/claude-code/claude.d:/etc/claude-code/claude.d.local}"
+
+TAB=$(printf '\t')
+
+# Map a "<dest>.json" directory name to its destination file under $HOME.
+# managed-settings.json is intentionally absent: it is root-owned at
+# /etc/claude-code/ and this loader runs as the unprivileged user.
+target_path() {
+	case "$1" in
+	*managed-settings.json) return 1 ;;
+	*settings.json) printf '%s\n' "$HOME/.claude/settings.json" ;;
+	*claude.json) printf '%s\n' "$HOME/.claude.json" ;;
+	*) return 1 ;;
+	esac
+}
+
+# Emit "basename<TAB>fullpath" for every entry across the search path, deduped
+# by basename (later search dir wins), sorted by basename.
+discover() {
+	_d=$(mktemp -d)
+	printf '%s\n' "$CLAUDE_CONFIG_PATH" | tr ':' '\n' | while IFS= read -r _dir; do
+		[ -n "$_dir" ] && [ -d "$_dir" ] || continue
+		for _e in "$_dir"/*; do
+			[ -e "$_e" ] || continue
+			printf '%s\n' "$_e" >"$_d/$(basename "$_e")"
+		done
+	done
+	for _f in "$_d"/*; do
+		[ -e "$_f" ] || continue
+		printf '%s%s%s\n' "$(basename "$_f")" "$TAB" "$(cat "$_f")"
+	done | LC_ALL=C sort
+	rm -rf "$_d"
+}
+
+# Merge one JSON fragment file into an accumulator file (in place).
+merge_into() { # $1=accumulator  $2=fragment
+	case "$2" in
+	*.tpl) _data=$(envsubst <"$2") ;;
+	*) _data=$(cat "$2") ;;
+	esac
+	if ! printf '%s' "$_data" | jq empty >/dev/null 2>&1; then
+		echo "claude-config-builder: invalid JSON in $2" >&2
+		exit 1
+	fi
+	_tmp=$(mktemp)
+	printf '%s' "$_data" | jq -s '.[0] * .[1]' "$1" - >"$_tmp"
+	mv "$_tmp" "$1"
+}
+
+cmd_apply() {
+	_work=$(mktemp -d)
+	_entries="$_work/entries"
+	_tlist="$_work/targets" # file of "dest<TAB>accumulator", one per registered target
+	: >"$_tlist"
+	discover >"$_entries"
+
+	# Seed an accumulator for a target on first use and register it; sets $_af.
+	# Called directly (never via command substitution) so registration sticks.
+	ensure_acc() { # $1=dest
+		_af="$_work/t$(printf '%s' "$1" | tr '/' '_')"
+		if [ ! -f "$_af" ]; then
+			if [ -f "$1" ]; then cp "$1" "$_af"; else printf '{}\n' >"$_af"; fi
+			printf '%s%s%s\n' "$1" "$TAB" "$_af" >>"$_tlist"
+		fi
+	}
+
+	while IFS="$TAB" read -r _name _path; do
+		if [ -d "$_path" ]; then
+			case "$_name" in
+			*managed-settings.json)
+				echo "claude-config-builder: '$_name' is root-owned; not a claude.d target (skipped)" >&2
+				;;
+			*.json)
+				if _dest=$(target_path "$_name"); then
+					ensure_acc "$_dest"
+					find "$_path" -maxdepth 1 -type f \( -name '*.json' -o -name '*.json.tpl' \) |
+						LC_ALL=C sort | while IFS= read -r _child; do
+						merge_into "$_af" "$_child"
+					done
+				else
+					echo "claude-config-builder: unknown target dir '$_name' (skipped)" >&2
+				fi
+				;;
+			esac
+		else
+			case "$_path" in
+			*.sh) CLAUDE_CONFIG_PHASE=apply sh -c '. "$1"' _ "$_path" || true ;;
+			*.json | *.json.tpl)
+				ensure_acc "$HOME/.claude.json"
+				merge_into "$_af" "$_path"
+				;;
+			esac
+		fi
+	done <"$_entries"
+
+	while IFS="$TAB" read -r _dest _af; do
+		mkdir -p "$(dirname "$_dest")"
+		jq . "$_af" >"$_dest"
+		echo "claude-config-builder: wrote $_dest" >&2
+	done <"$_tlist"
+	rm -rf "$_work"
+}
+
+cmd_shellenv() {
+	printf '%s\n' 'CLAUDE_CONFIG_PHASE=shellenv'
+	discover | while IFS="$TAB" read -r _name _path; do
+		case "$_path" in
+		*.sh) printf ". '%s'\n" "$_path" ;;
+		esac
+	done
+	printf '%s\n' 'unset CLAUDE_CONFIG_PHASE'
+}
+
+case "${1:-}" in
+apply) cmd_apply ;;
+shellenv) cmd_shellenv ;;
+*)
+	echo "usage: claude-config-builder {apply|shellenv}" >&2
+	exit 2
+	;;
+esac
