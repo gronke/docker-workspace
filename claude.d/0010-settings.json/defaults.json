@@ -1,10 +1,9 @@
 {
-  "theme": "auto",
-  "hasCompletedOnboarding": true,
-  "model": "opus",
-  "skipDangerousModePermissionPrompt": true,
+  "model": "opus[1m]",
+  "effortLevel": "max",
   "permissions": {
     "allow": ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch"],
     "deny": []
-  }
+  },
+  "skipDangerousModePermissionPrompt": true
 }

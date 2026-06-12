@@ -16,7 +16,7 @@ Runs as user `dev` (passwordless sudo) with working directory `/mnt`.
 
 ### Claude (`workspace-claude`)
 
-Extends base with a pre-configured Claude Code installation. Configuration is assembled at container start from JSON fragments in `claude.d/` (theme, onboarding-skip, MCP servers with runtime-substituted tokens). The shell alias `claude='claude --model "opus[1m]" --effort max'` is set in `~/.bashrc` for the `dev` user.
+Extends base with a pre-configured Claude Code installation. Configuration is assembled at container start by `claude-config-builder` from drop-in fragments in `claude.d/`: theme and onboarding-skip into `~/.claude.json`, model/effort/permissions into `~/.claude/settings.json`, MCP servers with runtime-expanded tokens. An interactive `claude` alias appends `$CLAUDE_ARGS` for session flags; operator overrides mount at `/etc/claude-code/claude.d.local`.
 
 ## Build
 
@@ -85,20 +85,47 @@ Requirements and knobs:
 
 ## claude.d — configuration fragments
 
-Claude Code settings live in JSON fragments under `/etc/claude-code/claude.d/` and are deep-merged into `~/.claude.json` at container start by `scripts/merge-claude-config.sh`:
+Claude Code configuration lives in an ordered drop-in tree assembled by `scripts/claude-config-builder` — once at container start (`claude-config-builder apply`, run by the entrypoint) and per interactive shell (`eval "$(claude-config-builder shellenv)"` in `/etc/bash.bashrc`).
 
-- `00-defaults.json` — shipped with the image (theme, onboarding-skip, model, permissions)
-- `40-github-mcp.json` — GitHub MCP via the hosted endpoint (`api.githubcopilot.com/mcp`). The header value is `"Bearer ${GITHUB_TOKEN}"` *literally* — Claude Code expands `${…}` references in `mcpServers.*.{command,args,env,url,headers}` at read time, so the token never persists in `~/.claude.json`.
-- `50-*.json` / `50-*.json.tpl` — additional server/infra-provided fragments (e.g. mounted via `-v` from a sibling `infrastructure` repo). `.json.tpl` files run through `envsubst` *at container start*, useful when something other than Claude itself reads the file.
-- `90-*.json` — user overrides (highest priority)
+Entries process in `LC_ALL=C` order by basename, unioned across the search path (`CLAUDE_CONFIG_PATH`, default `/etc/claude-code/claude.d:/etc/claude-code/claude.d.local`). On a basename collision the later directory wins, so a mounted override replaces the baked fragment of the same name.
 
-**File extension matters:** `.json` is merged as-is (good for MCP configs — Claude expands `${…}` natively). `.json.tpl` is processed through `envsubst` at startup (use when the consumer doesn't do its own expansion).
+| Entry | Goes to |
+|---|---|
+| `NNNN-name.json` (flat file) | merged into `~/.claude.json` (default target) |
+| `NNNN-name.json.tpl` (flat file) | `envsubst` first, then merged into `~/.claude.json` |
+| `[NNNN-]claude.json/` (directory) | its `*.json[.tpl]` children merged into `~/.claude.json` |
+| `[NNNN-]settings.json/` (directory) | its `*.json[.tpl]` children merged into `~/.claude/settings.json` |
+| `NNNN-name.sh` (hook) | sourced; branches on `$CLAUDE_CONFIG_PHASE` (`apply` at start \| `shellenv` per shell) |
+
+JSON merge is a recursive object merge (`jq '.[0] * .[1]'`); **arrays are replaced**, not concatenated — don't split an array across fragments. Targets are seeded from their existing files, so re-running is idempotent and preserves edits made on top. Claude Code reads `model`, `effortLevel`, `permissions`, `env`, `hooks` only from `~/.claude/settings.json`, and `theme`, `hasCompletedOnboarding`, `mcpServers` from `~/.claude.json` — put each key in a fragment targeting the file Claude actually reads it from.
+
+Shipped fragments:
+
+- `0010-claude.json/onboarding.json` — theme, onboarding-skip
+- `0010-settings.json/defaults.json` — default model, effort, permissions
+- `0040-github-mcp.json` — GitHub MCP via the hosted endpoint (`api.githubcopilot.com/mcp`). The header value is `"Bearer ${GITHUB_TOKEN}"` *literally* — Claude Code expands `${…}` references in `mcpServers.*.{command,args,env,url,headers}` at read time, so the token never persists in `~/.claude.json`.
+- `0050-claude-args.sh` — interactive `claude` alias appending `$CLAUDE_ARGS` (session flags; model/effort come from settings.json)
+
+**Overrides:** mount a fragment directory read-only at `/etc/claude-code/claude.d.local` (e.g. from a sibling infrastructure repo):
+
+```sh
+docker run -it \
+  -v /path/to/claude.d:/etc/claude-code/claude.d.local:ro \
+  ... \
+  workspace-claude
+```
+
+Flat fragments from the previous single-target layout keep working (they merge into `~/.claude.json`); mount override *directories* at `claude.d.local` instead of injecting files into the baked `claude.d/`.
+
+**File extension matters:** `.json` is merged as-is (good for MCP configs — Claude expands `${…}` natively). `.json.tpl` is processed through `envsubst` at assembly time (use when the consumer doesn't do its own expansion).
+
+The full contract is documented in [`claude.d/README.md`](claude.d/README.md).
 
 ## Structure
 
 ```
-claude.d/          Claude Code config fragments (deep-merged at startup)
-scripts/           merge-claude-config.sh + entrypoint.sh
+claude.d/          Claude Code config fragments (assembled at startup + per shell)
+scripts/           claude-config-builder + entrypoint scripts
 dotfiles/          Dotfiles copied into /home/dev/
 Dockerfile.base    Debian base layer
 Dockerfile.claude  Claude Code layer

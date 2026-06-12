@@ -24,9 +24,10 @@ if [ -f /etc/claude-code/CLAUDE.md.starter ] && [ ! -f "$HOME/.claude/CLAUDE.md"
     chmod 644 "$HOME/.claude/CLAUDE.md"
 fi
 
-# Assemble ~/.claude.json from /etc/claude-code/claude.d/ fragments.
-if [ -x /usr/local/bin/merge-claude-config.sh ]; then
-    /usr/local/bin/merge-claude-config.sh
+# Assemble Claude Code config from claude.d drop-ins (baked defaults
+# plus any overrides mounted at /etc/claude-code/claude.d.local).
+if command -v claude-config-builder >/dev/null 2>&1; then
+    claude-config-builder apply
 fi
 
 exec "$@"
