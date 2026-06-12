@@ -1,5 +1,5 @@
 {
-  "model": "opus[1m]",
+  "model": "fable",
   "effortLevel": "max",
   "permissions": {
     "allow": ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch"],
