@@ -34,11 +34,13 @@ RUN apt-get update \
       file \
       jq \
       ripgrep \
+      python3 python3-pip python3-venv \
       sudo \
       git \
       gettext-base \
       openssh-client \
       wireguard-tools \
+      bubblewrap \
       openresolv \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
