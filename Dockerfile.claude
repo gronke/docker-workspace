@@ -12,13 +12,6 @@ COPY --chmod=0755 scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 # claude.d shell hooks (aliases, env) for every interactive bash.
 RUN printf '%s\n' 'command -v claude-config-builder >/dev/null 2>&1 && eval "$(claude-config-builder shellenv)"' >> /etc/bash.bashrc
 
-# Starter ~/.claude/CLAUDE.md — installed by the entrypoint on first
-# start (does NOT overwrite an existing user file). Ships project
-# defaults (e.g. no Claude attribution in commits/PRs). Operators
-# edit ~/.claude/CLAUDE.md inside their running container to add or
-# override preferences; subsequent starts leave their edits alone.
-COPY .claude/CLAUDE.md /etc/claude-code/CLAUDE.md.starter
-
 USER dev
 
 # Install claude-code via native installer
