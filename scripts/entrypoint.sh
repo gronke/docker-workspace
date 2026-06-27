@@ -15,15 +15,6 @@ if [ -n "${GITHUB_TOKEN:-}" ]; then
     chmod 600 "$HOME/.git-credentials"
 fi
 
-# Install starter ~/.claude/CLAUDE.md if the user doesn't have one yet.
-# Pre-existing files (e.g. on a bind-mounted ~/.claude) are left alone
-# so operator customizations survive container restarts.
-if [ -f /etc/claude-code/CLAUDE.md.starter ] && [ ! -f "$HOME/.claude/CLAUDE.md" ]; then
-    mkdir -p "$HOME/.claude"
-    cp /etc/claude-code/CLAUDE.md.starter "$HOME/.claude/CLAUDE.md"
-    chmod 644 "$HOME/.claude/CLAUDE.md"
-fi
-
 # Assemble Claude Code config from claude.d drop-ins (baked defaults
 # plus any overrides mounted at /etc/claude-code/claude.d.local).
 if command -v claude-config-builder >/dev/null 2>&1; then

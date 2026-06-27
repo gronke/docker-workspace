@@ -1,0 +1,10 @@
+- Write full-width commit messages, text and Markdown files or posts. Prefer to break the line after a sentence, where it fits well and does not interrupt text flow.
+- No ads: Omit attribution for Claude or other Agents from commits and Pull-Request messages or any other form of communication.
+- Run QA locally before you commit, the GitHub CI Action provides a good checklist.
+- Focus documentation and comments on describing the status quo, not dealing with backwards compatibility unless asked to or when it is strictly advisable.
+- While having open PRs, check their status in a loop every 5 minutes, until the CI turns green or human attention is needed to identify or fix the issue. Codeowners can leave you a review with instructions clearly focussed on the given pull-request.
+- When vendoring external code, such as test fixtures, ensure proper attribution and licensing.
+- When CHANGELOG.md exists, maintain UNRELEASED section along with committed changes.
+- Upstream first: Be attentious for improvements in open-source dependencies, prefer to collect observations and make suggestions for reasonable improvements and bug fixes in third-party code.
+- Do not post/push to public repositories, that is impolite for bots.
+- Lookup the latest GitHub Actions or other dependencies before suggesting new ones with outdated versions.

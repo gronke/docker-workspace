@@ -1,0 +1,2 @@
+- Rust web projects are built with pure Rust, using the npm-utils and web_modules crate. Managing dependencies in a package.json and package-lock.json are preferred.
+- Make use of cargo fmt and clippy.
