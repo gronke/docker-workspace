@@ -1,0 +1,4 @@
+- Write full-width commit messages and Markdown. Prefer to break the line after a sentence, where it fits well.
+- Omit attribution for Claude from commits and Pull-Request messages or any other form of communication.
+- Run QA locally before you commit, the GitHub CI action provides as good checklist.
+- Focus documentation and comments on describing the status quo, not dealing with backwards compatibility unless asked to or when it is advisable.
