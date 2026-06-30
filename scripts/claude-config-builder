@@ -4,7 +4,7 @@
 # A claude.d directory stacks ordered drop-in fragments. Entries are processed
 # in LC_ALL=C order *by basename*, unioned across one or more search directories
 # (CLAUDE_CONFIG_PATH, colon-separated — later directory wins on a basename
-# collision). Four entry kinds:
+# collision). Five entry kinds:
 #
 #   NNNN-name.json        (flat file)  -> merged into the default target, ~/.claude.json
 #   NNNN-name.json.tpl    (flat file)  -> envsubst first, then merged into ~/.claude.json
@@ -12,16 +12,26 @@
 #                                         directory name (minus any NNNN- order prefix) maps to:
 #                                           claude.json   -> ~/.claude.json
 #                                           settings.json -> ~/.claude/settings.json
+#   [NNNN-]CLAUDE.md      (flat file)  -> concatenated into ~/.claude/CLAUDE.md (a .tpl variant
+#                                         is envsubst'd first). Fragments are the files whose
+#                                         basename ends in CLAUDE.md, so README.md is never one.
 #   NNNN-name.sh          (hook)       -> sourced; sets aliases / exports env / runs commands.
 #                                         Branches on $CLAUDE_CONFIG_PHASE (apply | shellenv).
 #
 # JSON merge is jq '.[0] * .[1]' — recursive object merge; ARRAYS ARE REPLACED
-# (last writer wins per key), so do not split an array across fragments. Each
+# (last writer wins per key), so do not split an array across fragments. Each JSON
 # target is seeded from its existing file, so re-running is idempotent and
 # preserves edits the user/session made on top.
 #
+# The markdown target (~/.claude/CLAUDE.md) is REGENERATED from its fragments on
+# every apply — concatenated in basename order, never merged — so it always
+# reflects the fragments and manual edits to it do not survive. Fragments layer
+# like every other entry: a later search-dir fragment with the same basename
+# overrides, a new basename appends. Add a [NNNN-]CLAUDE.md fragment (or use a
+# project-level CLAUDE.md) rather than editing the generated file.
+#
 # Modes:
-#   claude-config-builder apply      Assemble JSON targets and run hooks (phase=apply).
+#   claude-config-builder apply      Assemble JSON + markdown targets and run hooks (phase=apply).
 #                                    Run once at workspace startup.
 #   claude-config-builder shellenv   Print `. <hook>` lines for the shell to `eval`
 #                                    (phase=shellenv): `eval "$(claude-config-builder shellenv)"`.
@@ -34,6 +44,11 @@ set -eu
 : "${CLAUDE_CONFIG_PATH:=/etc/claude-code/claude.d:/etc/claude-code/claude.d.local}"
 
 TAB=$(printf '\t')
+
+# Marker prepended to generated markdown targets. A generic HTML comment (invisible
+# when rendered) that deliberately says nothing about how the file is assembled, so
+# the agent reading ~/.claude/CLAUDE.md needn't reason about its configuration.
+MD_BANNER='<!-- CUSTOM -->'
 
 # Map a "<dest>.json" directory name to its destination file under $HOME.
 # managed-settings.json is intentionally absent: it is root-owned at
@@ -80,20 +95,43 @@ merge_into() { # $1=accumulator  $2=fragment
 	mv "$_tmp" "$1"
 }
 
+# Append one markdown fragment file to an accumulator file (in place), with a
+# blank-line separator between fragments. *.tpl fragments run through envsubst.
+append_md() { # $1=accumulator  $2=fragment
+	case "$2" in
+	*.tpl) _data=$(envsubst <"$2") ;;
+	*) _data=$(cat "$2") ;;
+	esac
+	if [ -s "$1" ]; then printf '\n' >>"$1"; fi
+	printf '%s\n' "$_data" >>"$1"
+}
+
 cmd_apply() {
 	_work=$(mktemp -d)
 	_entries="$_work/entries"
-	_tlist="$_work/targets" # file of "dest<TAB>accumulator", one per registered target
+	_tlist="$_work/targets"     # "dest<TAB>accumulator", one per JSON target
+	_mdlist="$_work/md-targets" # "dest<TAB>accumulator", one per markdown target
 	: >"$_tlist"
+	: >"$_mdlist"
 	discover >"$_entries"
 
-	# Seed an accumulator for a target on first use and register it; sets $_af.
+	# Seed an accumulator for a JSON target on first use and register it; sets $_af.
 	# Called directly (never via command substitution) so registration sticks.
 	ensure_acc() { # $1=dest
 		_af="$_work/t$(printf '%s' "$1" | tr '/' '_')"
 		if [ ! -f "$_af" ]; then
 			if [ -f "$1" ]; then cp "$1" "$_af"; else printf '{}\n' >"$_af"; fi
 			printf '%s%s%s\n' "$1" "$TAB" "$_af" >>"$_tlist"
+		fi
+	}
+
+	# Seed an *empty* accumulator for a markdown target on first use and register
+	# it; sets $_mf. The empty seed is what makes the target a full regenerate.
+	ensure_md_acc() { # $1=dest
+		_mf="$_work/m$(printf '%s' "$1" | tr '/' '_')"
+		if [ ! -f "$_mf" ]; then
+			: >"$_mf"
+			printf '%s%s%s\n' "$1" "$TAB" "$_mf" >>"$_mdlist"
 		fi
 	}
 
@@ -122,6 +160,10 @@ cmd_apply() {
 				ensure_acc "$HOME/.claude.json"
 				merge_into "$_af" "$_path"
 				;;
+			*CLAUDE.md | *CLAUDE.md.tpl)
+				ensure_md_acc "$HOME/.claude/CLAUDE.md"
+				append_md "$_mf" "$_path"
+				;;
 			esac
 		fi
 	done <"$_entries"
@@ -131,6 +173,12 @@ cmd_apply() {
 		jq . "$_af" >"$_dest"
 		echo "claude-config-builder: wrote $_dest" >&2
 	done <"$_tlist"
+
+	while IFS="$TAB" read -r _dest _mf; do
+		mkdir -p "$(dirname "$_dest")"
+		{ printf '%s\n\n' "$MD_BANNER"; cat "$_mf"; } >"$_dest"
+		echo "claude-config-builder: wrote $_dest" >&2
+	done <"$_mdlist"
 	rm -rf "$_work"
 }
 
