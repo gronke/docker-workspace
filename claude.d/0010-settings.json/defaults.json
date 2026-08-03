@@ -2,7 +2,7 @@
   "model": "fable",
   "effortLevel": "max",
   "permissions": {
-    "allow": ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch"],
+    "allow": ["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
     "deny": []
   },
   "skipDangerousModePermissionPrompt": true,
