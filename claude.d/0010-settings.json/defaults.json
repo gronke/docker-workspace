@@ -5,6 +5,7 @@
     "allow": ["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
     "deny": []
   },
+  "idleCompaction": false,
   "skipDangerousModePermissionPrompt": true,
   "skipWebFetchPreflight": true
 }
